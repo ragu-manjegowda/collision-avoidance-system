@@ -1,6 +1,7 @@
 
 /* INCLUDES FOR THIS PROJECT */
 #include <cmath>
+#include <deque>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -111,9 +112,9 @@ int main(int argc, const char *argv[])
         10.0 / imgStepWidth;  // frames per second for Lidar and camera
     int dataBufferSize =
         2;  // no. of images which are held in memory (ring buffer) at the same time
-    vector<DataFrame> dataBuffer;  // list of data frames which are held in memory at the
-                                   // same time
-    bool bVis = false;             // visualize results
+    deque<DataFrame> dataBuffer;  // list of data frames which are held in memory at the
+                                  // same time
+    bool bVis = true;             // visualize results
 
     /* MAIN LOOP OVER ALL IMAGES */
 
@@ -133,6 +134,12 @@ int main(int argc, const char *argv[])
         // push image into data frame buffer
         DataFrame frame;
         frame.cameraImg = img;
+
+        if (dataBuffer.size() >= dataBufferSize)
+        {
+            dataBuffer.pop_front();
+        }
+
         dataBuffer.push_back(frame);
 
         cout << "#1 : LOAD IMAGE INTO BUFFER done" << endl;
@@ -193,46 +200,78 @@ int main(int argc, const char *argv[])
 
         // extract 2D keypoints from current image
         vector<cv::KeyPoint> keypoints;  // create empty feature list for current image
-        string detectorType = "SHITOMASI";
 
-        if (detectorType.compare("SHITOMASI") == 0)
-        {
-            detKeypointsShiTomasi(keypoints, imgGray, false);
-        }
-        else
-        {
-            //...
-        }
+        /*
+         * Enable string-based selection based on detectorType
+         * -> HARRIS, FAST, BRISK, ORB, AKAZE, SIFT
+         */
 
-        // optional : limit number of keypoints (helpful for debugging and learning)
-        bool bLimitKpts = false;
-        if (bLimitKpts)
-        {
-            int maxKeypoints = 50;
+        // Default to SIFT detector
+        string detectorType = "SIFT";
+        bool visDetector = true;
 
-            if (detectorType.compare("SHITOMASI") == 0)
-            {  // there is no response info, so keep the first 50 as they are sorted in
-               // descending quality order
-                keypoints.erase(keypoints.begin() + maxKeypoints, keypoints.end());
+        DetectorTypeIndex detectorTypeIndex = getDetectorTypeIndex(detectorType);
+
+        switch (detectorTypeIndex)
+        {
+            case DetectorTypeIndex::SHITOMASI:
+            {
+                detKeypointsShiTomasi(keypoints, imgGray, visDetector);
+                break;
             }
-            cv::KeyPointsFilter::retainBest(keypoints, maxKeypoints);
-            cout << " NOTE: Keypoints have been limited!" << endl;
+            case DetectorTypeIndex::HARRIS:
+            {
+                detKeypointsHarris(keypoints, imgGray, visDetector);
+                break;
+            }
+            case DetectorTypeIndex::FAST:
+            case DetectorTypeIndex::BRISK:
+            case DetectorTypeIndex::ORB:
+            case DetectorTypeIndex::AKAZE:
+            case DetectorTypeIndex::SIFT:
+            {
+                detKeypointsModern(keypoints, imgGray, detectorTypeIndex, visDetector);
+                break;
+            }
+            default:
+            {
+                throw invalid_argument("Invalid detector type");
+            }
+        }
+
+        // only keep keypoints on the preceding vehicle (only for debugging)
+        bool bFocusOnVehicle = true;
+        cv::Rect vehicleRect(535, 180, 180, 150);
+        vector<cv::KeyPoint> keypointsROI;
+
+        if (bFocusOnVehicle)
+        {
+            /*
+             * Removal logic with vector is not optimized, since this is temporary and
+             * gets removed in final project.
+             */
+            removeKeypointsOutsideBox(vehicleRect, keypoints, keypointsROI);
+            keypoints = keypointsROI;
         }
 
         // push keypoints and descriptor for current frame to end of data buffer
-        (dataBuffer.end() - 1)->keypoints = keypoints;
-
+        (dataBuffer.back()).keypoints = keypoints;
         cout << "#5 : DETECT KEYPOINTS done" << endl;
 
         /* EXTRACT KEYPOINT DESCRIPTORS */
 
+        /*
+         * Enable string-based selection based on descriptorType
+         *  -> BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
+         */
         cv::Mat descriptors;
-        string descriptorType = "BRISK";  // BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
-        descKeypoints((dataBuffer.end() - 1)->keypoints,
-                      (dataBuffer.end() - 1)->cameraImg, descriptors, descriptorType);
+        string descriptorType = "BRISK";
+        DescriptorTypeIndex descriptorTypeIndex = getDescriptorTypeIndex(descriptorType);
+        descKeypoints((dataBuffer.back()).keypoints, (dataBuffer.back()).cameraImg,
+                      descriptors, descriptorTypeIndex);
 
         // push descriptors for current frame to end of data buffer
-        (dataBuffer.end() - 1)->descriptors = descriptors;
+        (dataBuffer.back()).descriptors = descriptors;
 
         cout << "#6 : EXTRACT DESCRIPTORS done" << endl;
 
@@ -246,10 +285,11 @@ int main(int argc, const char *argv[])
             string descriptorType = "DES_BINARY";  // DES_BINARY, DES_HOG
             string selectorType = "SEL_NN";        // SEL_NN, SEL_KNN
 
-            matchDescriptors(
-                (dataBuffer.end() - 2)->keypoints, (dataBuffer.end() - 1)->keypoints,
-                (dataBuffer.end() - 2)->descriptors, (dataBuffer.end() - 1)->descriptors,
-                matches, descriptorType, matcherType, selectorType);
+            matchDescriptors(dataBuffer[dataBuffer.size() - 2].keypoints,
+                             dataBuffer[dataBuffer.size() - 1].keypoints,
+                             dataBuffer[dataBuffer.size() - 2].descriptors,
+                             dataBuffer[dataBuffer.size() - 1].descriptors, matches,
+                             descriptorType, matcherType, selectorType);
 
             // store matches in current data frame
             (dataBuffer.end() - 1)->kptMatches = matches;
