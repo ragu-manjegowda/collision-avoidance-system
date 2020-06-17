@@ -28,6 +28,16 @@ int main(int argc, const char *argv[])
 {
     /* INIT VARIABLES AND DATA STRUCTURES */
 
+    // Default to SIFT detector
+    string detectorType = "SIFT";
+
+    // Default to SIFT descriptor
+    string descriptorType = "BRISK";
+
+    // Default matcher params
+    string matcherType = "MAT_BF";   // MAT_BF, MAT_FLANN
+    string selectorType = "SEL_NN";  // SEL_NN, SEL_KNN
+
     // data location
     string dataPath = "../";
 
@@ -37,7 +47,7 @@ int main(int argc, const char *argv[])
     string imgFileType = ".png";
     int imgStartIndex = 0;  // first file index to load (assumes Lidar and camera names
                             // have identical naming convention)
-    int imgEndIndex = 18;   // last file index to load
+    int imgEndIndex = 77;   // last file index to load
     int imgStepWidth = 1;
     int imgFillWidth =
         4;  // no. of digits which make up the file index (e.g. img-0001.png)
@@ -114,7 +124,7 @@ int main(int argc, const char *argv[])
         2;  // no. of images which are held in memory (ring buffer) at the same time
     deque<DataFrame> dataBuffer;  // list of data frames which are held in memory at the
                                   // same time
-    bool bVis = true;             // visualize results
+    bool bVis = false;            // visualize results
 
     /* MAIN LOOP OVER ALL IMAGES */
 
@@ -146,7 +156,7 @@ int main(int argc, const char *argv[])
 
         /* DETECT & CLASSIFY OBJECTS */
 
-        float confThreshold = 0.2;
+        float confThreshold = 0.5;
         float nmsThreshold = 0.4;
         detectObjects((dataBuffer.end() - 1)->cameraImg,
                       (dataBuffer.end() - 1)->boundingBoxes, confThreshold, nmsThreshold,
@@ -175,7 +185,7 @@ int main(int argc, const char *argv[])
         /* CLUSTER LIDAR POINT CLOUD */
 
         // associate Lidar points with camera-based ROI
-        float shrinkFactor = 0.10;  // shrinks each bounding box by the given percentage
+        float shrinkFactor = 0.30;  // shrinks each bounding box by the given percentage
                                     // to avoid 3D object merging at the edges of an ROI
         clusterLidarWithROI((dataBuffer.end() - 1)->boundingBoxes,
                             (dataBuffer.end() - 1)->lidarPoints, shrinkFactor, P_rect_00,
@@ -186,7 +196,7 @@ int main(int argc, const char *argv[])
         if (bVis)
         {
             show3DObjects((dataBuffer.end() - 1)->boundingBoxes, cv::Size(4.0, 20.0),
-                          cv::Size(2000, 2000), true);
+                          cv::Size(500, 500), true);
         }
         bVis = false;
 
@@ -206,22 +216,18 @@ int main(int argc, const char *argv[])
          * -> HARRIS, FAST, BRISK, ORB, AKAZE, SIFT
          */
 
-        // Default to SIFT detector
-        string detectorType = "SIFT";
-        bool visDetector = true;
-
         DetectorTypeIndex detectorTypeIndex = getDetectorTypeIndex(detectorType);
 
         switch (detectorTypeIndex)
         {
             case DetectorTypeIndex::SHITOMASI:
             {
-                detKeypointsShiTomasi(keypoints, imgGray, visDetector);
+                detKeypointsShiTomasi(keypoints, imgGray, bVis);
                 break;
             }
             case DetectorTypeIndex::HARRIS:
             {
-                detKeypointsHarris(keypoints, imgGray, visDetector);
+                detKeypointsHarris(keypoints, imgGray, bVis);
                 break;
             }
             case DetectorTypeIndex::FAST:
@@ -230,7 +236,7 @@ int main(int argc, const char *argv[])
             case DetectorTypeIndex::AKAZE:
             case DetectorTypeIndex::SIFT:
             {
-                detKeypointsModern(keypoints, imgGray, detectorTypeIndex, visDetector);
+                detKeypointsModern(keypoints, imgGray, detectorTypeIndex, bVis);
                 break;
             }
             default:
@@ -265,7 +271,6 @@ int main(int argc, const char *argv[])
          *  -> BRISK, BRIEF, ORB, FREAK, AKAZE, SIFT
          */
         cv::Mat descriptors;
-        string descriptorType = "BRISK";
         DescriptorTypeIndex descriptorTypeIndex = getDescriptorTypeIndex(descriptorType);
         descKeypoints((dataBuffer.back()).keypoints, (dataBuffer.back()).cameraImg,
                       descriptors, descriptorTypeIndex);
@@ -281,10 +286,6 @@ int main(int argc, const char *argv[])
             /* MATCH KEYPOINT DESCRIPTORS */
 
             vector<cv::DMatch> matches;
-            string matcherType = "MAT_BF";         // MAT_BF, MAT_FLANN
-            string descriptorType = "DES_BINARY";  // DES_BINARY, DES_HOG
-            string selectorType = "SEL_NN";        // SEL_NN, SEL_KNN
-
             matchDescriptors(dataBuffer[dataBuffer.size() - 2].keypoints,
                              dataBuffer[dataBuffer.size() - 1].keypoints,
                              dataBuffer[dataBuffer.size() - 2].descriptors,
@@ -300,7 +301,7 @@ int main(int argc, const char *argv[])
 
             //// STUDENT ASSIGNMENT
             //// TASK FP.1 -> match list of 3D objects (vector<BoundingBox>) between
-            ///current and previous frame (implement ->matchBoundingBoxes)
+            /// current and previous frame (implement ->matchBoundingBoxes)
             map<int, int> bbBestMatches;
             matchBoundingBoxes(
                 matches, bbBestMatches, *(dataBuffer.end() - 2),
@@ -357,7 +358,7 @@ int main(int argc, const char *argv[])
                     //// STUDENT ASSIGNMENT
                     //// TASK FP.3 -> assign enclosed keypoint matches to bounding box
                     ///(implement -> clusterKptMatchesWithROI) / TASK FP.4 -> compute
-                    ///time-to-collision based on camera (implement -> computeTTCCamera)
+                    /// time-to-collision based on camera (implement -> computeTTCCamera)
                     double ttcCamera;
                     clusterKptMatchesWithROI(*currBB, (dataBuffer.end() - 2)->keypoints,
                                              (dataBuffer.end() - 1)->keypoints,
