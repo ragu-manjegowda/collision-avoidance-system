@@ -17,8 +17,7 @@ void clusterKptMatchesWithROI(BoundingBox &boundingBox,
                               std::vector<cv::KeyPoint> &kptsPrev,
                               std::vector<cv::KeyPoint> &kptsCurr,
                               std::vector<cv::DMatch> &kptMatches);
-void matchBoundingBoxes(std::vector<cv::DMatch> &matches,
-                        std::map<int, int> &bbBestMatches,
+void matchBoundingBoxes(std::map<int, int> &bbBestMatches,
                         DataFrame &prevFrame,
                         DataFrame &currFrame);
 

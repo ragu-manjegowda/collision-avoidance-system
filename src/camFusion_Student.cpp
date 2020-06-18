@@ -174,10 +174,103 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
     // ...
 }
 
-void matchBoundingBoxes(std::vector<cv::DMatch> &matches,
-                        std::map<int, int> &bbBestMatches,
+void matchBoundingBoxes(std::map<int, int> &bbBestMatches,
                         DataFrame &prevFrame,
                         DataFrame &currFrame)
 {
-    // ...
+
+    /*
+     * Algorithm,
+     * 1. Walk through all the keypoint matches in outer loop
+     *    a. Walk through all the boundingbox of previous frame and store the boxID that
+     *       has this key point
+     *    b. Walk through all the boundingbox of current frame and store the boxID that
+     *       has this key point
+     * 2. Increment the counter of this ID pair (map<pair<prevBoxID, currBoxID>, counter>)
+     * 3. Iterate through all the bounding boxes in previous frame
+     *    a. Store the BoxID of curr frame that has the most matches (highest counter)
+     *    b. Store the combination of prevFrame BoxID and current frame BoxID as match
+     */
+
+    std::map<pair<int, int>, int> matchersMap;
+
+    int bbPrevFrameBoxIDInvalid = -1;
+    int bbCurrFrameBoxIDInvalid = -1;
+
+    for (auto &kptMatch : currFrame.kptMatches)
+    {
+        int queryIdx = kptMatch.queryIdx;
+        int trainIdx = kptMatch.trainIdx;
+
+        int bbPrevFrameBoxID = bbPrevFrameBoxIDInvalid;
+        int bbCurrFrameBoxID = bbCurrFrameBoxIDInvalid;
+
+        if ((queryIdx >= prevFrame.keypoints.size()))
+        {
+            std::cerr << "Query index = " << queryIdx << endl;
+            std::cerr << "Previous frame keypoints size = " << prevFrame.keypoints.size()
+                      << endl;
+            throw invalid_argument("Invalid prevFrame matches");
+        }
+
+        if ((trainIdx >= currFrame.keypoints.size()))
+        {
+            std::cerr << "Query index = " << trainIdx << endl;
+            std::cerr << "Current frame keypoints size = " << currFrame.keypoints.size()
+                      << endl;
+            throw invalid_argument("Invalid currFrame matches");
+        }
+
+        for (auto &it : prevFrame.boundingBoxes)
+        {
+            if (it.roi.contains(prevFrame.keypoints[queryIdx].pt))
+            {
+                bbPrevFrameBoxID = it.boxID;
+                it.kptMatches.push_back(kptMatch);
+                it.keypoints.push_back(prevFrame.keypoints[queryIdx]);
+                break;
+            }
+        }
+
+        for (auto &it : currFrame.boundingBoxes)
+        {
+            if (it.roi.contains(currFrame.keypoints[trainIdx].pt))
+            {
+                bbCurrFrameBoxID = it.boxID;
+                it.kptMatches.push_back(kptMatch);
+                it.keypoints.push_back(currFrame.keypoints[trainIdx]);
+                break;
+            }
+        }
+
+        if ((bbPrevFrameBoxID != bbPrevFrameBoxIDInvalid) &&
+            (bbCurrFrameBoxID != bbCurrFrameBoxIDInvalid))
+        {
+            matchersMap[make_pair(bbPrevFrameBoxID, bbCurrFrameBoxID)]++;
+        }
+    }
+
+    for (auto &it : prevFrame.boundingBoxes)
+    {
+        int max = 0;
+        int prevIndex = it.boxID;
+        int currIndex = -1;
+
+        for (auto &matcherCount : matchersMap)
+        {
+            if (matcherCount.first.first == it.boxID)
+            {
+                if (matcherCount.second > max)
+                {
+                    currIndex = matcherCount.first.second;
+                    max = matcherCount.second;
+                }
+            }
+        }
+
+        if (currIndex != -1)
+        {
+            bbBestMatches[prevIndex] = currIndex;
+        }
+    }
 }
