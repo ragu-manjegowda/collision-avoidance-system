@@ -28,11 +28,21 @@ int main(int argc, const char *argv[])
 {
     /* INIT VARIABLES AND DATA STRUCTURES */
 
-    // Default to SIFT detector
-    string detectorType = "SIFT";
+    // Default to FAST detector
+    string detectorType = "FAST";
 
-    // Default to SIFT descriptor
-    string descriptorType = "BRISK";
+    // Default to BRIEF descriptor
+    string descriptorType = "BRIEF";
+
+    string descriptorType_BIN_HOG;
+    if (descriptorType == "SIFT")
+    {
+        descriptorType_BIN_HOG = "DES_HOG";
+    }
+    else
+    {
+        descriptorType_BIN_HOG = "DES_BINARY";
+    }
 
     // Default matcher params
     string matcherType = "MAT_BF";   // MAT_BF, MAT_FLANN
@@ -152,8 +162,6 @@ int main(int argc, const char *argv[])
 
         dataBuffer.push_back(frame);
 
-        cout << "#1 : LOAD IMAGE INTO BUFFER done" << endl;
-
         /* DETECT & CLASSIFY OBJECTS */
 
         float confThreshold = 0.5;
@@ -162,8 +170,6 @@ int main(int argc, const char *argv[])
                       (dataBuffer.end() - 1)->boundingBoxes, confThreshold, nmsThreshold,
                       yoloBasePath, yoloClassesFile, yoloModelConfiguration,
                       yoloModelWeights, bVis);
-
-        cout << "#2 : DETECT & CLASSIFY OBJECTS done" << endl;
 
         /* CROP LIDAR POINTS */
 
@@ -180,8 +186,6 @@ int main(int argc, const char *argv[])
 
         (dataBuffer.end() - 1)->lidarPoints = lidarPoints;
 
-        cout << "#3 : CROP LIDAR POINTS done" << endl;
-
         /* CLUSTER LIDAR POINT CLOUD */
 
         // associate Lidar points with camera-based ROI
@@ -192,15 +196,13 @@ int main(int argc, const char *argv[])
                             R_rect_00, RT);
 
         // Visualize 3D objects
-        bVis = true;
+        bVis = false;
         if (bVis)
         {
             show3DObjects((dataBuffer.end() - 1)->boundingBoxes, cv::Size(4.0, 20.0),
                           cv::Size(500, 500), true);
         }
         bVis = false;
-
-        cout << "#4 : CLUSTER LIDAR POINT CLOUD done" << endl;
 
         /* DETECT IMAGE KEYPOINTS */
 
@@ -246,7 +248,7 @@ int main(int argc, const char *argv[])
         }
 
         // only keep keypoints on the preceding vehicle (only for debugging)
-        bool bFocusOnVehicle = true;
+        bool bFocusOnVehicle = false;
         cv::Rect vehicleRect(535, 180, 180, 150);
         vector<cv::KeyPoint> keypointsROI;
 
@@ -262,7 +264,6 @@ int main(int argc, const char *argv[])
 
         // push keypoints and descriptor for current frame to end of data buffer
         (dataBuffer.back()).keypoints = keypoints;
-        cout << "#5 : DETECT KEYPOINTS done" << endl;
 
         /* EXTRACT KEYPOINT DESCRIPTORS */
 
@@ -278,8 +279,6 @@ int main(int argc, const char *argv[])
         // push descriptors for current frame to end of data buffer
         (dataBuffer.back()).descriptors = descriptors;
 
-        cout << "#6 : EXTRACT DESCRIPTORS done" << endl;
-
         if (dataBuffer.size() > 1)  // wait until at least two images have been processed
         {
 
@@ -290,12 +289,10 @@ int main(int argc, const char *argv[])
                              dataBuffer[dataBuffer.size() - 1].keypoints,
                              dataBuffer[dataBuffer.size() - 2].descriptors,
                              dataBuffer[dataBuffer.size() - 1].descriptors, matches,
-                             descriptorType, matcherType, selectorType);
+                             descriptorType_BIN_HOG, matcherType, selectorType);
 
             // store matches in current data frame
             (dataBuffer.end() - 1)->kptMatches = matches;
-
-            cout << "#7 : MATCH KEYPOINT DESCRIPTORS done" << endl;
 
             /* TRACK 3D OBJECT BOUNDING BOXES */
 
@@ -312,8 +309,6 @@ int main(int argc, const char *argv[])
 
             // store matches in current data frame
             (dataBuffer.end() - 1)->bbMatches = bbBestMatches;
-
-            cout << "#8 : TRACK 3D OBJECT BOUNDING BOXES done" << endl;
 
             /* COMPUTE TTC ON OBJECT IN FRONT */
 
@@ -348,18 +343,20 @@ int main(int argc, const char *argv[])
                     prevBB->lidarPoints.size() > 0)  // only compute TTC if we have Lidar
                                                      // points
                 {
-                    //// STUDENT ASSIGNMENT
-                    //// TASK FP.2 -> compute time-to-collision based on Lidar data
-                    ///(implement -> computeTTCLidar)
+                    /*
+                     * compute time-to-collision based on Lidar data
+                     * (implement -> computeTTCLidar)
+                     */
                     double ttcLidar;
                     computeTTCLidar(prevBB->lidarPoints, currBB->lidarPoints,
                                     sensorFrameRate, ttcLidar);
-                    //// EOF STUDENT ASSIGNMENT
 
-                    //// STUDENT ASSIGNMENT
-                    //// TASK FP.3 -> assign enclosed keypoint matches to bounding box
-                    ///(implement -> clusterKptMatchesWithROI) / TASK FP.4 -> compute
-                    /// time-to-collision based on camera (implement -> computeTTCCamera)
+                    /*
+                     * assign enclosed keypoint matches to bounding box
+                     * (implement -> clusterKptMatchesWithROI)
+                     * compute time-to-collision based on camera
+                     * (implement -> computeTTCCamera)
+                     */
                     double ttcCamera;
                     clusterKptMatchesWithROI(*currBB, (dataBuffer.end() - 2)->keypoints,
                                              (dataBuffer.end() - 1)->keypoints,
@@ -367,7 +364,6 @@ int main(int argc, const char *argv[])
                     computeTTCCamera((dataBuffer.end() - 2)->keypoints,
                                      (dataBuffer.end() - 1)->keypoints,
                                      currBB->kptMatches, sensorFrameRate, ttcCamera);
-                    //// EOF STUDENT ASSIGNMENT
 
                     bVis = true;
                     if (bVis)

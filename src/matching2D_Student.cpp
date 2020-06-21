@@ -19,7 +19,8 @@ void matchDescriptors(std::vector<cv::KeyPoint> &kPtsSource,
 
     if (matcherType.compare("MAT_BF") == 0)
     {
-        int normType = cv::NORM_HAMMING;
+        int normType =
+            descriptorType.compare("DES_BINARY") == 0 ? cv::NORM_HAMMING : cv::NORM_L2;
         matcher = cv::BFMatcher::create(normType, crossCheck);
     }
     else if (matcherType.compare("MAT_FLANN") == 0)
@@ -114,8 +115,6 @@ void descKeypoints(vector<cv::KeyPoint> &keypoints,
     double t = (double)cv::getTickCount();
     extractor->compute(img, keypoints, descriptors);
     t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
-    cout << getDescriptorTypeString(descriptorTypeIndex) << " descriptor extraction in "
-         << 1000 * t / 1.0 << " ms" << endl;
 }
 
 // Detect keypoints in image using the traditional Shi-Thomasi detector
@@ -148,8 +147,6 @@ void detKeypointsShiTomasi(vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool b
         keypoints.push_back(newKeyPoint);
     }
     t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
-    cout << "Shi-Tomasi detection with n=" << keypoints.size() << " keypoints in "
-         << 1000 * t / 1.0 << " ms" << endl;
 
     // visualize results
     if (bVis)
@@ -224,8 +221,6 @@ void detKeypointsHarris(vector<cv::KeyPoint> &keypoints, cv::Mat &img, bool bVis
         }  // eof loop over cols
     }
     t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
-    cout << "Harris corner detection with n=" << keypoints.size() << " keypoints in "
-         << 1000 * t / 1.0 << " ms" << endl;
 
     // visualize results
     if (bVis)
@@ -288,8 +283,6 @@ void detKeypointsModern(std::vector<cv::KeyPoint> &keypoints,
     }
 
     t = ((double)cv::getTickCount() - t) / cv::getTickFrequency();
-    cout << getDetectorTypeString(detectorTypeIndex) + " detection with n="
-         << keypoints.size() << " keypoints in " << 1000 * t / 1.0 << " ms" << endl;
 
     // visualize results
     if (bVis)
