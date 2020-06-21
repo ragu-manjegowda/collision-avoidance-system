@@ -171,7 +171,55 @@ void computeTTCLidar(std::vector<LidarPoint> &lidarPointsPrev,
                      double frameRate,
                      double &TTC)
 {
-    // ...
+    // auxiliary variables
+    double dT = 1.0 / frameRate;  // time between two measurements in seconds
+    double laneWidth = 4.0;       // assumed width of the ego lane
+
+    // calculate the median previous x position
+    vector<double> xPrev;
+
+    for (auto it = lidarPointsPrev.begin(); it != lidarPointsPrev.end(); ++it)
+    {
+        // remove lidar points outside the lane
+        if (abs(it->y) <= (laneWidth / 2.0))
+        {
+            xPrev.push_back(it->x);
+        }
+    }
+
+    std::sort(xPrev.begin(), xPrev.end());
+    long medIndex = floor(xPrev.size() / 2.0);
+    double medXPrev = xPrev.size() % 2 == 0
+                          ? (xPrev[medIndex - 1] + xPrev[medIndex]) / 2.0
+                          : xPrev[medIndex];
+
+    // calculate the median current x position
+    vector<double> xCurr;
+
+    for (auto it = lidarPointsCurr.begin(); it != lidarPointsCurr.end(); ++it)
+    {
+        // remove lidar points outside the lane
+        if (abs(it->y) <= (laneWidth / 2.0))
+        {
+            xCurr.push_back(it->x);
+        }
+    }
+
+    std::sort(xCurr.begin(), xCurr.end());
+    medIndex = floor(xCurr.size() / 2.0);
+    double medXCurr = xCurr.size() % 2 == 0
+                          ? (xCurr[medIndex - 1] + xCurr[medIndex]) / 2.0
+                          : xCurr[medIndex];
+
+    // compute TTC from both measurements
+    if (abs(medXPrev - medXCurr) > std::numeric_limits<double>::epsilon())
+    {
+        TTC = medXCurr * dT / abs(medXPrev - medXCurr);
+    }
+    else
+    {
+        TTC = NAN;
+    }
 }
 
 void matchBoundingBoxes(std::map<int, int> &bbBestMatches,
