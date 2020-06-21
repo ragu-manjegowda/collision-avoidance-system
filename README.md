@@ -1,16 +1,127 @@
-# SFND 3D Object Tracking
+# Collision Avoidance System
 
-Welcome to the final project of the camera course. By completing all the lessons, you now have a solid understanding of keypoint detectors, descriptors, and methods to match them between successive images. Also, you know how to detect objects in an image using the YOLO deep-learning framework. And finally, you know how to associate regions in a camera image with Lidar points in 3D space. Let's take a look at our program schematic to see what we already have accomplished and what's still missing.
+Design of a collision avoidance system by fusing data from lidar and camera. Camera and Lidar sensor data is taken from KITTI dataset.
 
-<img src="images/course_code_structure.png" width="779" height="414" />
+<img src="man/figures/collisionAvoidanceSystem.gif" width="900" height="350" />
 
-In this final project, you will implement the missing parts in the schematic. To do this, you will complete four major tasks: 
-1. First, you will develop a way to match 3D objects over time by using keypoint correspondences. 
-2. Second, you will compute the TTC based on Lidar measurements. 
-3. You will then proceed to do the same using the camera, which requires to first associate keypoint matches to regions of interest and then to compute the TTC based on those matches. 
-4. And lastly, you will conduct various tests with the framework. Your goal is to identify the most suitable detector/descriptor combination for TTC estimation and also to search for problems that can lead to faulty measurements by the camera or Lidar sensor. In the last course of this Nanodegree, you will learn about the Kalman filter, which is a great way to combine the two independent TTC measurements into an improved version which is much more reliable than a single sensor alone can be. But before we think about such things, let us focus on your final project in the camera course. 
+## High level architecture
+
+<img src="man/figures/collisionAvoidanceSystem.png"/>
+
+Objective of the project is to estimate time to collision based on the inputs from camera and lidar sensors.
+
+Following are the four major tasks to do this:
+
+## Object classification
+
+<img src="man/figures/objectClassification.png" width="900" height="350" />
+
+Object detection and classification is out of the scope of this project, for sake of simplicity quick and simple off-the-shelf deep learning based object detection and classification framework [YOLO](https://www.youtube.com/watch?v=NM6lrxy0bxs).
+
+All the images from camera sensor is fed in to YOLO framework to obtain bounding boxes as shown in the image.
+
+
+## Crop Lidar points
+
+### Top view perspective of Lidar points
+
+<img src="man/figures/lidarToCamera.png" width="900" height="350" /> 
+
+
+1. Points cloud received from Lidar sensor (10 Hz) is cropped to focus on ego lane
+
+2. Later lidar points are transformed from lidar co-ordinate system to Homogeneous co-ordinate system.
+3. Points in homogeneous system and projected to camera plane using calibration matrices (Provided by KITTI)
+
+```
+// assemble vector for matrix-vector-multiplication
+X.at<double>(0, 0) = it1->x;
+X.at<double>(1, 0) = it1->y;
+X.at<double>(2, 0) = it1->z;
+X.at<double>(3, 0) = 1;
+
+// project Lidar point into camera
+Y = P_rect_xx * R_rect_xx * RT * X;
+cv::Point pt;
+pt.x = Y.at<double>(0, 0) / Y.at<double>(0, 2);  // pixel coordinates
+pt.y = Y.at<double>(1, 0) / Y.at<double>(0, 2);
+```
+
+4. Lidar Points in image plane that lies within bounding boxes are stored within the data structure boundingBox and the rest are filtered out. Points in each bounding box is shriked by the given percentage to avoid 3D object merging at the edges of an ROI
+
+<img src="man/figures/lidarToCameraProcessedTopView.png" width="700" height="700" />
+
+
+## Keypoints detection and their correspondences
+
+<img src="man/figures/keypointsMatching.png" width="900" height="350" />
+
+By analyzing and comparing classic computer vision concepts HARRIS corner detection, SHITHOMASI against modern algorithms like FAST, SIFT, BRISK etc.., a robust mechanis is developed that can detect keypoints and generate descriptors. 
+
+Descriptors from two images (current and previous) are then matched using suitable macthing (Brute Force or FLANN) and selector types (Nearest Neightbour or K-Nearest Neighbour).
+
+Following are the different detectors, descriptors algorithms supported and compared in the project for speed and accuracy.
+
+```
+enum class DetectorTypeIndex
+{
+    FAST = 0,
+    BRISK = 1,
+    ORB = 2,
+    AKAZE = 3,
+    SIFT = 4,
+    SHITOMASI = 5,
+    HARRIS = 6
+};
+
+enum class DescriptorTypeIndex
+{
+    BRISK = 0,
+    BRIEF = 1,
+    ORB = 2,
+    FREAK = 3,
+    AKAZE = 4,
+    SIFT = 5,
+};
+```
+
+Detailed information about comparions between different detectors and descriptors can be found here,
+
+[DetectorDescriptorAnalysis](https://docs.google.com/spreadsheets/d/1m-ptLTKXCUn8nhX25oxF452m0p5xW5rIebDYBdNSZgU/edit?usp=sharing)
+
+
+## Match bounding boxes between two frames
+
+Based on the matched keypoints, bounding boxes between teo consecutive images are compared and thier indices are matched based on the keypoint information.
+
+## Calculating TTC (Time to Collision)
+
+Based on the matched bounding box information time to collision is calculated separately using lidar and camera data.
+
+### Using Lidar data
+
+Implemented the estimation in a way that makes it robust against outliers which might be way too close and thus lead to faulty estimates of the TTC. For the lidar points that was processed earlier, time to collision is calculated by calculating the median of the lidar points along x axis (driving direction).
+
+### Using Camera data
+
+1. All the matched keypoints between current and previous images are iterated and distance between them is calculated, then median of those distances is calculated.
+2. All the points that are of distance greater then `maxDistanceFromMedian` are filtered to remove the outliers.
+3. A reliable TTC estimate with the median of all relative distance ratios​ between previous and current images.
+
+## Display the computer TTC
+
+In the final non-technical part, calculated TTC information from lidar and camera is rendered using `cv::imshow`, bounding box is rendered in red if the TTC is less than 7 seconds.
+
 
 ## Dependencies for Running Locally
+
+### Using docker
+```
+$ docker pull ragumanjegowda/docker:latest
+```
+
+### Native (I have not tested this)
+
 * cmake >= 2.8
   * All OSes: [click here for installation instructions](https://cmake.org/install/)
 * make >= 4.1 (Linux, Mac), 3.81 (Windows)
@@ -27,9 +138,16 @@ In this final project, you will implement the missing parts in the schematic. To
   * Mac: same deal as make - [install Xcode command line tools](https://developer.apple.com/xcode/features/)
   * Windows: recommend using [MinGW](http://www.mingw.org/)
 
+
 ## Basic Build Instructions
 
-1. Clone this repo.
-2. Make a build directory in the top level project directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./3D_object_tracking`.
+```
+$> mkdir build && cd build
+$> cmake -G Ninja ..
+$> ninja -j400
+$> ./3D_object_tracking
+```
+
+## Credits
+
+Based on Udacity's [SFND_3D_Object_Tracking](https://github.com/udacity/SFND_3D_Object_Tracking)
