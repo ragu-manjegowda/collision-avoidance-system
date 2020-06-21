@@ -26,6 +26,7 @@ using namespace std;
 /* MAIN PROGRAM */
 int main(int argc, const char *argv[])
 {
+    bool first = true;
     /* INIT VARIABLES AND DATA STRUCTURES */
 
     // Default to FAST detector
@@ -371,22 +372,52 @@ int main(int argc, const char *argv[])
                         cv::Mat visImg = (dataBuffer.end() - 1)->cameraImg.clone();
                         showLidarImgOverlay(visImg, currBB->lidarPoints, P_rect_00,
                                             R_rect_00, RT, &visImg);
-                        cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y),
-                                      cv::Point(currBB->roi.x + currBB->roi.width,
-                                                currBB->roi.y + currBB->roi.height),
-                                      cv::Scalar(0, 255, 0), 2);
+
+                        if (ttcLidar < 7.0 && ttcCamera < 7.0)
+                        {
+                            cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y),
+                                          cv::Point(currBB->roi.x + currBB->roi.width,
+                                                    currBB->roi.y + currBB->roi.height),
+                                          cv::Scalar(0, 0, 255), 2);
+                        }
+                        else
+                        {
+                            cv::rectangle(visImg, cv::Point(currBB->roi.x, currBB->roi.y),
+                                          cv::Point(currBB->roi.x + currBB->roi.width,
+                                                    currBB->roi.y + currBB->roi.height),
+                                          cv::Scalar(0, 255, 0), 2);
+                        }
 
                         char str[200];
                         sprintf(str, "TTC Lidar : %f s, TTC Camera : %f s", ttcLidar,
                                 ttcCamera);
+
+                        cout << "TTC Delta = " << abs(ttcLidar - ttcCamera) << endl;
+
+                        cv::Size text =
+                            cv::getTextSize(str, cv::FONT_HERSHEY_PLAIN, 2, 1, nullptr);
+
+                        cv::rectangle(visImg, cv::Point2f(75, 55),
+                                      cv::Point(80, 50) +
+                                          cv::Point(text.width + 3, -(text.height + 3)),
+                                      CV_RGB(0, 0, 0), -1);
+
                         putText(visImg, str, cv::Point2f(80, 50), cv::FONT_HERSHEY_PLAIN,
-                                2, cv::Scalar(0, 0, 255));
+                                2, cv::Scalar(255, 255, 255));
 
                         string windowName = "Final Results : TTC";
                         cv::namedWindow(windowName, 4);
                         cv::imshow(windowName, visImg);
-                        cout << "Press key to continue to next frame" << endl;
-                        cv::waitKey(0);
+                        if (first)
+                        {
+                            cout << "Press key to continue to next frame" << endl;
+                            cv::waitKey(0);
+                            first = false;
+                        }
+                        else
+                        {
+                            cv::waitKey(02);
+                        }
                     }
                     bVis = false;
 
